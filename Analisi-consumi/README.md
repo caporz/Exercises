@@ -1,84 +1,86 @@
-# Analisi riutilizzabile di consumi per servizio e prodotto (R)
+# Reusable Consumption Analysis by Service and Product (R)
 
-## Obiettivo
+## Objective
 
-Analizzare qualunque estrazione con colonne equivalenti a:
+Analyze any data extract containing columns equivalent to:
 
 `Servizio`, `Descrizione servizio`, `Prodotto`, `Descrizione prodotto`, `Anno`, `Mese`, `Quantita consumata`, `Valore alimentazione`.
 
-Il numero di righe, gli anni, i codici prodotto, le descrizioni, i valori e i centri di costo NON sono fissati nello script. Sono supportati `txt`/`tsv` delimitati da tabulazioni, `csv` delimitati da `;` o `,`, `xls`/`xlsx`. Le righe iniziali di titolo (come "Titolo del report") vengono saltate automaticamente se l'intestazione e' nelle prime 80 righe.
+The number of rows, years, product codes, descriptions, values, and cost centers are **not hardcoded in the script**.
 
-## Avvio rapido
+The script supports `txt`/`tsv` files delimited by tabs, `csv` files delimited by `;` or `,`, and `xls`/`xlsx` files. Initial title rows (such as "Report Title") are automatically skipped if the header row is found within the first 80 rows.
 
-1. Installare **R >= 4.1** e i pacchetti (solo la prima volta):
+## Quick Start
+
+1. Install **R >= 4.1** and the required packages (first-time setup only):
 
    ```r
    install.packages(c("dplyr", "tidyr", "readr", "readxl", "writexl", "ggplot2"))
    ```
 
-2. Modificare `configurazione.R` (percorso di input e output) e `mappatura_servizi.csv`.
-3. Da RStudio, impostare come directory di lavoro la cartella degli script e avviare:
+2. Edit `configurazione.R` (input and output paths) and `mappatura_servizi.csv`.
+3. In RStudio, set the scripts folder as the working directory and run:
 
    ```r
    source("analisi_consumi.R")
    ```
 
-   Oppure da un terminale (il codice R assume percorsi relativi alla directory corrente):
+   Alternatively, run the script from a terminal (R code assumes paths are relative to the current working directory):
 
    ```bash
    Rscript analisi_consumi.R "ORL23-24.txt" "risultati" "mappatura_servizi.csv"
    ```
 
-## Adattamento alle nuove estrazioni
+## Adapting the Script to New Data Extracts
 
-- Modificare solo il percorso del file in `configurazione.R` o il primo argomento da terminale.
-- Il file `mappatura_servizi.csv` collega ciascun codice `servizio` a un `ambito`. Le due righe incluse sono **solo un esempio basato sull'estrazione ORL**: verificare che C372 corrisponda effettivamente al perimetro "Ricoveri" nei dati dell'ente. Se i codici cambiano, modificare la mappatura, non il codice R.
-- Un codice non presente nella mappatura resta visibile come **"Da classificare"**, non viene assegnato a caso.
-- In caso di encoding non UTF-8, cambiare `codifica_testo` (es. `Windows-1252`).
-- Se un file Excel ha piu' fogli, modificare `foglio_excel`.
-- Modificare le soglie statistiche nella lista `config$soglia`, senza cambiare le funzioni.
+- Only change the file path in `configurazione.R` or the first command-line argument.
+- The `mappatura_servizi.csv` file maps each `servizio` code to an `ambito` (scope/category). The two included rows are **examples based on the ORL data extract only**: verify that C372 actually corresponds to the "Inpatient Admissions" scope in the organization's data. If codes change, update the mapping file, not the R code.
+- Any code not included in the mapping remains visible as **"To be classified"** rather than being assigned arbitrarily.
+- If the file uses an encoding other than UTF-8, change `codifica_testo` (e.g. `Windows-1252`).
+- If an Excel file contains multiple worksheets, change `foglio_excel`.
+- Statistical thresholds can be adjusted in the `config$soglia` list without modifying the functions.
 
-## Logica delle medie
+## Average Calculation Logic
 
-L'unita' di analisi e' **servizio + codice prodotto + mese**. Codici e descrizioni sono trattati come testo; le descrizioni non sono usate come chiave, perche' possono variare. Se esistono piu' righe per lo stesso servizio/prodotto/mese, vengono sommate.
+The unit of analysis is **service + product code + month**. Codes and descriptions are treated as text. Descriptions are not used as keys because they may change. If multiple rows exist for the same service/product/month combination, their values are summed.
 
-- `media_mensile = quantita_totale / mesi_per_media`: include i mesi esplicitamente a consumo **zero**.
-- `media_mesi_con_consumo`: media delle quantita' nei soli mesi **positivi** (utile per articoli occasionali, non sostituisce la media generale).
-- I mesi del calendario privi di righe per quel servizio/prodotto vengono creati **solo tra il primo e l'ultimo mese in cui il prodotto compare**, contrassegnati `mese_assente = TRUE`, e lasciati `NA` per impostazione predefinita. Non vengono confusi con consumo zero.
-- Per trattare i mesi mancanti come zero, impostare `imputa_mesi_mancanti_zero = TRUE`, scelta **da usare solo se l'assenza della riga equivale effettivamente a consumo zero**. `mesi_rilevati` e `mesi_per_media` permettono di verificare il denominatore.
-- I prodotti mai comparsi in un anno non sono considerati automaticamente 'consumo zero' in quell'anno.
+- `media_mensile = quantita_totale / mesi_per_media`: includes months explicitly recorded with **zero** consumption.
+- `media_mesi_con_consumo`: average quantity across months with **positive** consumption only (useful for occasional items; it does not replace the overall average).
+- Calendar months with no records for a given service/product are generated **only between the first and last month in which the product appears**. They are flagged as `mese_assente = TRUE` and left as `NA` by default. They are not treated as zero consumption.
+- To treat missing months as zero, set `imputa_mesi_mancanti_zero = TRUE`. This option should be used **only if the absence of a record genuinely means zero consumption**. The `mesi_rilevati` and `mesi_per_media` fields allow the denominator to be checked.
+- Products that never appear in a given year are not automatically treated as having had zero consumption in that year.
 
-## Quantita' e valore economico
+## Quantities and Financial Values
 
-- I costi con `quantita = 0` e `valore != 0` restano inclusi nel **valore economico complessivo** ma non generano quantita' fisiche.
-- `VOCE_SOLO_ECONOMICA`: codice prodotto senza consumi quantitativi positivi nell'intera estrazione. **Non prova da solo che si tratti di un ribaltamento di controllo di gestione**: il codice va classificato con l'ufficio competente.
-- `RETTIFICA_SENZA_QUANTITA`: riga a valore senza quantita' per un prodotto che ha anche consumi quantitativi positivi in altri mesi.
-- `QUANTITA_NON_VALORIZZATA` e `QUANTITA_NEGATIVA` vengono evidenziati per verifica, senza correggere i dati automaticamente.
-- Il dato economico comprende eventuali rettifiche positive e negative. Si producono separatamente `valore_con_quantita` e `valore_senza_quantita`.
+- Costs with `quantita = 0` and `valore != 0` remain included in the **overall financial value**, but do not generate physical quantities.
+- `VOCE_SOLO_ECONOMICA`: a product code with no positive quantitative consumption across the entire data extract. **This alone does not prove that the item is a management accounting allocation**: the code must be classified with the relevant department.
+- `RETTIFICA_SENZA_QUANTITA`: a value-only entry for a product that also has positive quantitative consumption in other months.
+- `QUANTITA_NON_VALORIZZATA` and `QUANTITA_NEGATIVA` are flagged for review; the data are not automatically corrected.
+- Financial values include any positive or negative adjustments. The script separately produces `valore_con_quantita` and `valore_senza_quantita`.
 
-## Outlier e altre segnalazioni
+## Outliers and Other Flags
 
-- **Outlier mensili**: confronto con il comportamento storico dello stesso `servizio + prodotto`, con soglia MAD (robusta), IQR in alternativa, oppure mediana dei mesi con consumo se entrambe sono zero. Servono almeno 8 mesi osservati e 4 mesi con quantita' positive (parametri modificabili). Le soglie sono prudenziali ma non sono una validazione clinica.
-- **Consumi concentrati**: quota di quantita' annua in un singolo mese oltre il 65%, con ulteriori minimi di volume/mesi.
-- **Variazioni annue**: confronto tra anni consecutivi solo sui mesi presenti in entrambi gli anni, con minimo 6 mesi comparabili. Esempio: gennaio-settembre 2023 contro gennaio-settembre 2024, non intero 2023 contro 9 mesi del 2024.
-- **Costi unitari anomali**: variazioni del rapporto `valore/quantita` rispetto alla mediana storica del prodotto; la segnalazione non equivale a una variazione di prezzo di acquisto, perche' il valore puo' contenere rettifiche.
+- **Monthly outliers**: comparison with the historical behavior of the same `servizio + prodotto`, using a robust MAD threshold, IQR as an alternative, or the median of months with consumption if both methods return zero. At least 8 observed months and 4 months with positive quantities are required (parameters can be adjusted). Thresholds are conservative but do not constitute clinical validation.
+- **Concentrated consumption**: more than 65% of the annual quantity occurring in a single month, subject to additional minimum volume/month requirements.
+- **Year-over-year changes**: consecutive years are compared only across months present in both years, with a minimum of 6 comparable months. Example: January–September 2023 versus January–September 2024, rather than the whole of 2023 versus 9 months of 2024.
+- **Unusual unit costs**: changes in the `valore/quantita` ratio compared with the product's historical median. A flag does not necessarily indicate a change in the purchase price, because the value may include adjustments.
 
-Le soglie sono parametri iniziali, da tarare con farmacia, economato e controllo di gestione, e possibilmente confrontando ricoveri/prestazioni per ottenere indicatori per attivita' clinica.
+Thresholds are initial parameters and should be calibrated with the Pharmacy, Supplies and Logistics, and Management Control departments. Where possible, comparisons with admissions/procedures should also be performed to obtain indicators related to clinical activity.
 
-**Importante:** i totali delle quantita' di prodotti diversi non vengono sommati nei report per ambito, perche' le unita' di misura possono essere eterogenee (pezzi, confezioni, ml, ecc.).
+**Important:** total quantities for different products are not added together in reports by scope/category, because units of measure may differ (pieces, packages, ml, etc.).
 
 ## Output
 
-Nella cartella `risultati`:
+The following files are generated in the `risultati` folder:
 
-- `analisi_consumi.xlsx`: quadratura dei totali con l'input, prospetti di sintesi, medie per anno e intero periodo, outlier, variazioni, concentrazioni, anomalie economiche, costi senza quantita', voci solo economiche, mesi assenti, codici non classificati e dati importati.
-- `outlier_mensili.csv`, `variazioni_annue.csv` per utilizzi successivi.
-- `valore_mensile_ambiti.png`, `quantita_top_prodotti.png` per visualizzazione.
+- `analisi_consumi.xlsx`: reconciliation of totals against the input data, summary reports, averages by year and for the entire period, outliers, variations, concentration analysis, financial anomalies, costs without quantities, financial-only entries, missing months, unclassified codes, and imported data.
+- `outlier_mensili.csv`, `variazioni_annue.csv` for subsequent use.
+- `valore_mensile_ambiti.png`, `quantita_top_prodotti.png` for visualization.
 
-## Controlli e limitazioni
+## Checks and Limitations
 
-- Le colonne obbligatorie e l'anno/mese devono essere validi; nessuna riga invalida e' scartata silenziosamente: lo script si ferma segnalando le righe da correggere.
-- Le unita' di misura NON sono in input: il sistema puo' confrontare la quantita' dello stesso codice, ma non affermare che codici diversi misurino la stessa unita'.
-- La mediana e gli outlier sono riferiti all'intero periodo contenuto nel file; in presenza di forti cambiamenti strutturali dell'attivita', valutare analisi per segmenti o normalizzazione per numero di procedure.
-- I codici possono cambiare nel tempo pur rappresentando lo stesso materiale: senza una tabella di equivalenze, vengono gestiti come prodotti distinti.
-- La classificazione per ambito dipende dalla mappatura validata dall'utente.
+- Required columns and year/month values must be valid. No invalid row is silently discarded: the script stops and reports the rows that need to be corrected.
+- Units of measure are **not included in the input data**. The system can compare quantities for the same product code, but cannot claim that different codes refer to the same unit of measure.
+- The median and outliers refer to the entire period contained in the file. If there are significant structural changes in activity, consider segment-based analysis or normalization by the number of procedures.
+- Product codes may change over time while still representing the same material. Without a code-equivalence table, they are treated as distinct products.
+- Classification by scope/category depends on the mapping validated by the user.
